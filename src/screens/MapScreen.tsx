@@ -1,6 +1,7 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { StyleSheet, View, ActivityIndicator, TextInput } from 'react-native';
+import { StyleSheet, View, ActivityIndicator, TextInput, Text } from 'react-native';
 import MapView, { Region } from 'react-native-maps';
+import ClusteredMapView from 'react-native-map-clustering';
 import * as Location from 'expo-location';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Cafe } from '../types/cafe';
@@ -21,10 +22,11 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Map'>;
 export default function MapScreen({ navigation }: Props) {
   const [cafes, setCafes] = useState<Cafe[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Cafe[] | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<MapView | null>(null);
 
   const loadCafesForRegion = useCallback(async (region: Region) => {
     setLoading(true);
@@ -36,8 +38,10 @@ export default function MapScreen({ navigation }: Props) {
         maxLng: region.longitude + region.longitudeDelta / 2,
       });
       setCafes(data);
+      setError(null);
     } catch (e) {
       console.warn('Failed to load cafes', e);
+      setError('Could not load cafes. Check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -94,8 +98,13 @@ export default function MapScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      <MapView
-        ref={mapRef}
+      {/* react-native-map-clustering's mapRef prop type is mistyped upstream; spread as a plain object to bypass it */}
+      <ClusteredMapView
+        {...({
+          mapRef: (ref: MapView | null) => {
+            mapRef.current = ref;
+          },
+        } as object)}
         style={styles.map}
         initialRegion={AUSTRALIA_REGION}
         onRegionChangeComplete={onRegionChangeComplete}
@@ -104,7 +113,7 @@ export default function MapScreen({ navigation }: Props) {
         {cafes.map((cafe) => (
           <CafeMarker key={cafe.id} cafe={cafe} onPress={() => onSelectCafe(cafe)} />
         ))}
-      </MapView>
+      </ClusteredMapView>
 
       <View style={styles.searchBar}>
         <TextInput
@@ -122,6 +131,12 @@ export default function MapScreen({ navigation }: Props) {
       {loading && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator />
+        </View>
+      )}
+
+      {error && !loading && (
+        <View style={styles.errorBanner}>
+          <Text style={styles.errorText}>{error}</Text>
         </View>
       )}
     </View>
@@ -152,5 +167,18 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 110,
     alignSelf: 'center',
+  },
+  errorBanner: {
+    position: 'absolute',
+    bottom: 24,
+    left: 16,
+    right: 16,
+    backgroundColor: '#a3231f',
+    borderRadius: 8,
+    padding: 12,
+  },
+  errorText: {
+    color: 'white',
+    textAlign: 'center',
   },
 });
